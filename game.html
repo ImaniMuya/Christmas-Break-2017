@@ -1,3 +1,52 @@
 <html>
 
+<canvas id="canvas" width="400" height="400">
+Your browser doesn't support canvas!
+</canvas>
+
+
+<script>
+var ticks = 0;
+var pause = 10;
+var backColor = '#777';
+var ctx = canvas.getContext("2d");
+
+var keys = {};
+var x = 200;
+
+
+function tick() {
+	ticks++;
+	if (ticks >= pause) {
+		ticks = 0;
+		draw();
+		update();
+	}
+}
+
+function draw() {
+	ctx.fillStyle=backColor;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	ctx.fillStyle='red';
+	ctx.fillRect(0, 0, x, canvas.height);
+}
+
+function update() {
+	if (keys[37])
+		x--;
+	if (keys[39])
+		x++;
+}
+
+onkeydown = function(e) {
+	keys[e.keyCode] = true;
+}
+
+onkeyup = function(e) {
+	keys[e.keyCode] = false;
+}
+
+setInterval(tick, 1)
+</script>
+
 </html>
