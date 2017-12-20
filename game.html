@@ -13,6 +13,7 @@ var ctx = canvas.getContext("2d");
 
 var keys = {};
 var x = 200;
+var y = 400;
 
 
 function tick() {
@@ -28,7 +29,7 @@ function draw() {
 	ctx.fillStyle=backColor;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 	ctx.fillStyle='red';
-	ctx.fillRect(0, 0, x, canvas.height);
+	ctx.fillRect(0, 0, x, y);
 }
 
 function update() {
@@ -36,6 +37,10 @@ function update() {
 		x--;
 	if (keys[39])
 		x++;
+	if (keys[38])
+		y--;
+	if (keys[40])
+		y++;		
 }
 
 onkeydown = function(e) {
