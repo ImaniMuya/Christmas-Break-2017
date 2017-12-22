@@ -1,20 +1,124 @@
 <html>
 
-<canvas id="canvas" width="400" height="400">
-Your browser doesn't support canvas!
+<div style="text-align:center; margin:30px;">
+<canvas id="canvas" width="600" height="600" style="margin:auto;">
+	Your browser doesn't support canvas!
 </canvas>
+</div>
 
 
 <script>
+const FRICTION = .9;
+const GRAVITY = 2.5;
+const pause = 8;
+
 var ticks = 0;
-var pause = 10;
 var backColor = '#777';
 var ctx = canvas.getContext("2d");
 
 var keys = {};
-var x = 200;
-var y = 400;
+var lastKeys = {};
 
+var floor = 450;
+var ceiling = 150;
+
+var camera = {
+	x: 0,
+	vx: 1,
+	update: function() {
+
+	}
+}
+
+var player = {
+	x: 20,
+	y: 300,
+	h: 60,
+	w: 30,
+	color: 'red',
+	vx: 0,
+	vy: 0,
+	maxv: 9,
+	ax: 2,
+	jumps: 2,
+	draw: function(ctx) {
+		ctx.fillStyle=this.color;
+		ctx.fillRect(this.x, this.y, this.w, this.h);
+	},
+	update: function() {
+		if (keys[37]) { //left
+			this.vx -= this.ax;
+			if (this.vx < -this.maxv)
+				this.vx = -this.maxv;
+		}
+		if (keys[39]) { //right
+			this.vx += this.ax;
+			if (this.vx > this.maxv)
+				this.vx = this.maxv;
+		}
+		this.h = 60;
+		if (keys[40]) { //down
+			this.vy += GRAVITY;
+			this.h = 30;
+			this.y += 30;
+		}
+
+		this.x += this.vx;
+		this.y += this.vy;
+		this.vx *= FRICTION;
+		if (this.y < ceiling) {
+			this.y = ceiling;
+			this.vy = 0;
+		}
+		else if (this.y < floor - this.h) { //above floor
+			this.vy += GRAVITY;
+		} else { //collision
+			this.vy = 0;
+			this.y = floor - this.h;
+			this.jumps = 2;
+		}
+	}
+}
+
+function drawFloor(ctx) {
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0, floor, canvas.width, canvas.height-floor)
+}
+function drawCeiling(ctx) {
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0, 0, canvas.width, ceiling)
+}
+
+function drawBackground(ctx) {
+	ctx.fillStyle=backColor;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+
+onkeydown = function(e) {
+	if (player.jumps && e.keyCode == 38 && !keys[38]) { //up
+		player.vy = -25;
+		player.jumps--;
+	}
+	keys[e.keyCode] = true;
+}
+
+onkeyup = function(e) {
+	keys[e.keyCode] = false;
+}
+
+function draw() {
+	drawBackground(ctx);
+	
+	player.draw(ctx);
+	drawFloor(ctx);
+	drawCeiling(ctx);
+}
+
+function update() {
+	player.update();
+	camera.update();
+}
 
 function tick() {
 	ticks++;
@@ -23,32 +127,6 @@ function tick() {
 		draw();
 		update();
 	}
-}
-
-function draw() {
-	ctx.fillStyle=backColor;
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
-	ctx.fillStyle='red';
-	ctx.fillRect(0, 0, x, y);
-}
-
-function update() {
-	if (keys[37])
-		x--;
-	if (keys[39])
-		x++;
-	if (keys[38])
-		y--;
-	if (keys[40])
-		y++;		
-}
-
-onkeydown = function(e) {
-	keys[e.keyCode] = true;
-}
-
-onkeyup = function(e) {
-	keys[e.keyCode] = false;
 }
 
 setInterval(tick, 1)
