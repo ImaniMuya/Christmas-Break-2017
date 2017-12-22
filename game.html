@@ -10,6 +10,8 @@
 <script>
 const FRICTION = .9;
 const GRAVITY = 2.5;
+const PI = Math.PI;
+const TAU = 2 * PI;
 const pause = 8;
 
 var ticks = 0;
@@ -17,30 +19,37 @@ var backColor = '#777';
 var ctx = canvas.getContext("2d");
 
 var lives = 3; 
+var score = 0;
 
 var keys = {};
+var lastKeys = {};
 
 var floor = 450;
 var ceiling = 150;
 
 var floorSpikes = [];
 var ceilingSpikes = [];
+var fSpikeTimer = random(0, 200); 
+var cSpikeTimer = random(0, 200);
 
-var fSpikeTimer = Math.floor(Math.random() * 100);
-var cSpikeTimer = Math.floor(Math.random() * 100);
+var running = true;
+var paused = false;
+
+const [LEFT, UP, DOWN, RIGHT] = [0, 1, 2, 3]
+var direction = LEFT;
 
 var camera = {
 	x: 0,
-	vx: 1,
+	vx: 3,
 	update: function() {
 		this.vx += 0.001
 		this.x += this.vx;
 		player.x += this.vx;
 		fSpikeTimer-= this.vx;
 		cSpikeTimer-= this.vx;
+		score += this.vx;
 	}
 }
-
 var player = {
 	x: 20,
 	y: 300,
@@ -67,11 +76,16 @@ var player = {
 			if (this.vx > this.maxv)
 				this.vx = this.maxv;
 		}
+		if (player.jumps && keys[38] && !lastKeys[38]) { //up
+			this.vy = -25;
+			this.jumps--;
+		}
 		this.h = 60;
 		if (keys[40]) { //down
-			this.vy += GRAVITY;
 			this.h = 30;
-			this.y += 30;
+			if (!lastKeys[40])
+				this.y += 30;
+			this.y += 20;
 		}
 
 		this.x += this.vx;
@@ -88,7 +102,43 @@ var player = {
 			this.y = floor - this.h;
 			this.jumps = 2;
 		}
+
+		if (this.x - camera.x < 10)
+			this.x = camera.x + 10;
+		if (this.x - camera.x + this.w > canvas.width - 10)
+			this.x = canvas.width + camera.x - this.w - 10
+
+		lastKeys = JSON.parse(JSON.stringify(keys)); //deep copy
 	}
+}
+
+var healthPack = {
+	x: random(1000, 3000),
+	y: random(160, 440),
+	r: 10,
+	color: 'white',
+	draw: function(ctx) {
+		ctx.fillStyle = this.color;
+		ctx.beginPath();
+		ctx.arc(this.x - camera.x, this.y, this.r, 0, TAU);
+		ctx.fill();
+		ctx.fillStyle = 'black';
+		ctx.stroke();
+	},
+	update: function() {
+		let dx = Math.abs(this.x - player.x);
+		let pBot = player.y + player.h;
+		if (dx < player.w && player.y < this.y - this.r && pBot > this.y) {
+			lives ++;
+			this.y = random(160, 440);
+			this.x += random(1000, 3000);
+		}
+	}
+}
+
+function random(base, max) {
+	let range = max - base + 1;
+	return base + Math.floor(Math.random() * range);
 }
 
 function drawFloor(ctx) {
@@ -109,7 +159,8 @@ function drawStats(ctx) {
 	ctx.font = '24px serif';
 	ctx.fillStyle = 'yellow';
 	ctx.textAlign = 'left';
-	ctx.fillText("Lives: " + lives, 10, 30)
+	ctx.fillText("Lives: " + lives, 10, 30);
+	ctx.fillText("Score: " + Math.floor(score/100), 10, 60);
 }
 
 function newFloorSpike(x, h) {
@@ -165,10 +216,8 @@ function newCeilingSpike(x, h) {
 }
 
 onkeydown = function(e) {
-	if (player.jumps && e.keyCode == 38 && !keys[38]) { //up
-		player.vy = -25;
-		player.jumps--;
-	}
+	if (e.keyCode == 80 && !keys[80])
+		paused = !paused;
 	keys[e.keyCode] = true;
 }
 
@@ -176,10 +225,19 @@ onkeyup = function(e) {
 	keys[e.keyCode] = false;
 }
 
+onfocus = function (e) {
+	if (!paused)
+		running = true;
+}
+
+onblur = function (e) {
+	if (!paused)
+		running = false;
+}
+
 function draw() {
 	drawBackground(ctx);
 	
-	player.draw(ctx);
 	drawFloor(ctx);
 	drawCeiling(ctx);
 	for (let spike of floorSpikes) {
@@ -188,42 +246,59 @@ function draw() {
 	for (let spike of ceilingSpikes) {
 		spike.draw(ctx);
 	}
+	healthPack.draw(ctx)
+	player.draw(ctx);
+
 	drawStats(ctx);
 }
 
-function update() { 
-//TODO: Score
-//TODO: healing
-//TODO: clean-up 
+function update() {
 //TODO: rotation
-//TODO: sprites 
+//TODO: sprites
+//TODO: endgame
 	player.update();
 	camera.update();
-	for (let spike of floorSpikes) {
+	for (let s in floorSpikes) {
+		let spike = floorSpikes[s];
 		spike.update();
+		if (spike.x - camera.x < -50)
+			floorSpikes.splice(s--, 1)
+		
 	}
-	for (let spike of ceilingSpikes) {
+	for (let s in ceilingSpikes) {
+		let spike = ceilingSpikes[s];
 		spike.update();
+		if (spike.x - camera.x < -50)
+			ceilingSpikes.splice(s--, 1)
 	}
 
 	if (fSpikeTimer <= 0) {
-		let h = 30 + Math.floor(Math.random()*100)
-		floorSpikes.push(newFloorSpike(camera.x + 600,h))
-		fSpikeTimer = 200 + Math.floor(Math.random()*300);
+		let h = random(30, 100);
+		floorSpikes.push(newFloorSpike(Math.floor(camera.x) + 600, h))
+		fSpikeTimer = random(200, 500);
 	}	
 	if (cSpikeTimer <= 0) {
-		let h = 30 + Math.floor(Math.random()*100)
-		ceilingSpikes.push(newCeilingSpike(camera.x + 600,h))
-		cSpikeTimer = 200 + Math.floor(Math.random()*300);
+		let h = random(30, 100);
+		ceilingSpikes.push(newCeilingSpike(Math.floor(camera.x) + 600,h))
+		cSpikeTimer = random(200, 500);
 	}
+	healthPack.update();
 }
 
 function tick() {
-	ticks++;
-	if (ticks >= pause) {
-		ticks = 0;
-		draw();
-		update();
+	if (!paused && running) {
+		ticks++;
+		if (ticks >= pause) {
+			ticks -= pause;
+			draw();
+			update();
+		}
+	}
+	else {
+		ctx.font = '140px serif';
+		ctx.fillStyle = 'darkgray';
+		ctx.textAlign = 'center'
+		ctx.fillText("Paused", canvas.width/2, canvas.height/2 + 50);
 	}
 }
 setInterval(tick, 1)
