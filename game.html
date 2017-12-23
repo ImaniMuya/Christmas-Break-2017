@@ -44,12 +44,15 @@ var camera = {
 	update: function() {
 		this.vx += 0.001
 		this.x += this.vx;
-		player.x += this.vx;
 		fSpikeTimer-= this.vx;
 		cSpikeTimer-= this.vx;
 		score += this.vx;
+		
+		if (direction == LEFT || direction == RIGHT)
+			player.x += this.vx;
 	}
 }
+var lastPlayer = {};
 var player = {
 	x: 20,
 	y: 300,
@@ -61,11 +64,13 @@ var player = {
 	maxv: 9,
 	ax: 2,
 	jumps: 2,
+	midair: true,
 	draw: function(ctx) {
 		ctx.fillStyle=this.color;
 		ctx.fillRect(this.x - camera.x, this.y, this.w, this.h);
 	},
-	update: function() {
+	updateLR: function() {
+		this.midair = true;
 		if (keys[37]) { //left
 			this.vx -= this.ax;
 			if (this.vx < -this.maxv)
@@ -76,7 +81,7 @@ var player = {
 			if (this.vx > this.maxv)
 				this.vx = this.maxv;
 		}
-		if (player.jumps && keys[38] && !lastKeys[38]) { //up
+		if (this.jumps && keys[38] && !lastKeys[38]) { //up
 			this.vy = -25;
 			this.jumps--;
 		}
@@ -101,6 +106,7 @@ var player = {
 			this.vy = 0;
 			this.y = floor - this.h;
 			this.jumps = 2;
+			this.midair = false;
 		}
 
 		if (this.x - camera.x < 10)
@@ -109,11 +115,46 @@ var player = {
 			this.x = canvas.width + camera.x - this.w - 10
 
 		lastKeys = JSON.parse(JSON.stringify(keys)); //deep copy
+	},
+	updateUD: function() {
+		if (keys[37]) { //left
+			this.vy += this.ax;
+			if (this.vy < -this.maxv)
+				this.vy = -this.maxv;
+		}
+		if (keys[39]) { //right
+			this.vy -= this.ax;
+			if (this.vy > this.maxv)
+				this.vy = this.maxv;
+		}
+
+		if (this.jumps && keys[38] && !lastKeys[38]) { //up
+			this.vx = -25;
+			this.jumps--;
+		}
+
+		this.x += this.vx;
+		this.y += this.vy;
+		this.vy *= FRICTION;
+		if (this.midair)
+			this.vx += GRAVITY;
+		else //returns your jump if jumped from ground
+			this.jumps = 1;
+
+		if (this.y < ceiling) { //ceiling and floor are really the walls now
+			this.y = ceiling;
+			this.vy = 0;
+		} else if (this.y > floor - this.h) {
+			this.vy = 0;
+			this.y = floor - this.h;
+		}
+		this.midair = true;
+		lastKeys = JSON.parse(JSON.stringify(keys)); //deep copy
 	}
 }
 
 var healthPack = {
-	x: random(1000, 3000),
+	x: random(0,10),//random(1000, 3000),
 	y: random(160, 440),
 	r: 10,
 	color: 'white',
@@ -128,12 +169,23 @@ var healthPack = {
 	update: function() {
 		let dx = Math.abs(this.x - player.x);
 		let pBot = player.y + player.h;
-		if (dx < player.w && player.y < this.y - this.r && pBot > this.y) {
-			lives ++;
+		if (contains(this.x, this.y, player.x-this.r, player.y-this.r,
+					player.x + player.w + this.r, player.y + player.h + this.r)) {
+			lives++;
 			this.y = random(160, 440);
-			this.x += random(1000, 3000);
+			this.x += random(400,420)//random(1000, 3000);
+		} else if (this.x - camera.x < -10) {
+			this.y = random(160, 440);
+			this.x += random(400,420)//random(1000, 3000);
 		}
 	}
+}
+
+function contains(px, py, cx1, cy1, cx2, cy2) {
+	if (px >= cx1 && px <= cx2)
+	if (py >= cy1 && py <= cy2)
+		return true;
+	return false;
 }
 
 function random(base, max) {
@@ -161,6 +213,7 @@ function drawStats(ctx) {
 	ctx.textAlign = 'left';
 	ctx.fillText("Lives: " + lives, 10, 30);
 	ctx.fillText("Score: " + Math.floor(score/100), 10, 60);
+	ctx.fillText("M: " + player.jumps, 10, 90);
 }
 
 function newFloorSpike(x, h) {
@@ -175,7 +228,7 @@ function newFloorSpike(x, h) {
 			ctx.fillStyle = this.color; 
 			ctx.fillRect(this.x - camera.x, this.y, this.w, this.h)
 		},
-		update : function() {
+		updateLR : function() {
 			let dx = Math.abs(this.x - player.x);
 			let dy = Math.abs(this.y - player.y);
 			if (dx < player.w && dy < player.h) {
@@ -184,6 +237,15 @@ function newFloorSpike(x, h) {
 					lives--;
 					this.touched = true;
 				} 
+			}
+		},
+		updateUD : function() {
+			if (player.y < this.y + this.h && player.y + player.h > this.y &&
+			player.x + player.w >= this.x && player.x + player.w - player.vx <= this.x) {
+				this.color = 'black';
+				player.midair = false;
+				player.x = this.x - player.w;
+				player.vx = 0;
 			}
 		}
 	}
@@ -201,7 +263,7 @@ function newCeilingSpike(x, h) {
 			ctx.fillStyle = this.color; 
 			ctx.fillRect(this.x - camera.x, this.y, this.w, this.h)
 		},
-		update : function() {
+		updateLR : function() {
 			let dx = Math.abs(this.x - player.x);
 			let dy = Math.abs(this.y - player.y);
 			if (dx < player.w && dy < this.h) {
@@ -210,6 +272,15 @@ function newCeilingSpike(x, h) {
 					lives--;
 					this.touched = true;
 				} 
+			}
+		},
+		updateUD : function() {
+			if (player.y < this.y + this.h && player.y + player.h > this.y &&
+			player.x + player.w >= this.x && player.x + player.w - player.vx <= this.x) {
+				this.color = 'black';
+				player.midair = false;
+				player.x = this.x - player.w;
+				player.vx = 0;
 			}
 		}
 	}
@@ -231,13 +302,18 @@ onfocus = function (e) {
 }
 
 onblur = function (e) {
-	if (!paused)
+	if (!paused){
 		running = false;
+	}
 }
 
 function draw() {
 	drawBackground(ctx);
-	
+	if (direction == DOWN) {
+		ctx.translate(canvas.width, 0);
+		ctx.rotate(PI/2);
+	}
+
 	drawFloor(ctx);
 	drawCeiling(ctx);
 	for (let spike of floorSpikes) {
@@ -249,28 +325,58 @@ function draw() {
 	healthPack.draw(ctx)
 	player.draw(ctx);
 
+	if (direction == DOWN) {
+		ctx.rotate(-PI/2);
+		ctx.translate(-canvas.width, 0);
+	}
+
 	drawStats(ctx);
 }
 
 function update() {
 //TODO: rotation
+//TODO: rotation transitions
+//TODO: other side collision
 //TODO: sprites
 //TODO: endgame
-	player.update();
+	switch(direction){
+		case UP:
+		case DOWN:
+		player.updateUD();
+		for (let s in floorSpikes) {
+			let spike = floorSpikes[s];
+			spike.updateUD();
+			if (spike.x - camera.x < -50)
+				floorSpikes.splice(s--, 1)
+			
+		}
+		for (let s in ceilingSpikes) {
+			let spike = ceilingSpikes[s];
+			spike.updateUD();
+			if (spike.x - camera.x < -50)
+				ceilingSpikes.splice(s--, 1)
+		}
+		break;
+		case LEFT:
+		case RIGHT:
+		player.updateLR();
+		for (let s in floorSpikes) {
+			let spike = floorSpikes[s];
+			spike.updateLR();
+			if (spike.x - camera.x < -50)
+				floorSpikes.splice(s--, 1)
+			
+		}
+		for (let s in ceilingSpikes) {
+			let spike = ceilingSpikes[s];
+			spike.updateLR();
+			if (spike.x - camera.x < -50)
+				ceilingSpikes.splice(s--, 1)
+		}
+		break;
+	}
+	lastPlayer = JSON.parse(JSON.stringify(player));
 	camera.update();
-	for (let s in floorSpikes) {
-		let spike = floorSpikes[s];
-		spike.update();
-		if (spike.x - camera.x < -50)
-			floorSpikes.splice(s--, 1)
-		
-	}
-	for (let s in ceilingSpikes) {
-		let spike = ceilingSpikes[s];
-		spike.update();
-		if (spike.x - camera.x < -50)
-			ceilingSpikes.splice(s--, 1)
-	}
 
 	if (fSpikeTimer <= 0) {
 		let h = random(30, 100);
@@ -290,8 +396,8 @@ function tick() {
 		ticks++;
 		if (ticks >= pause) {
 			ticks -= pause;
-			draw();
 			update();
+			draw();
 		}
 	}
 	else {
@@ -302,6 +408,16 @@ function tick() {
 	}
 }
 setInterval(tick, 1)
-</script>
 
+setTimeout(() => {
+	direction = DOWN;
+	player.h = player.h ^ player.w;
+	player.w = player.h ^ player.w;
+	player.h = player.h ^ player.w;
+	player.vx = 0;
+	player.vy = 0;
+	player.jumps = 1;
+}, 3000)
+
+</script>
 </html>
