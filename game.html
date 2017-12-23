@@ -35,21 +35,27 @@ var cSpikeTimer = random(0, 200);
 var running = true;
 var paused = false;
 
-const [LEFT, UP, DOWN, RIGHT] = [0, 1, 2, 3]
-var direction = LEFT;
+const [RIGHT, LEFT, DOWN, UP] = [0, 1, 2, 3]
+var direction = RIGHT;
 
 var camera = {
 	x: 0,
 	vx: 3,
 	update: function() {
-		this.vx += 0.001
+		this.vx += 0.001 * this.vx / Math.abs(this.vx)
 		this.x += this.vx;
-		fSpikeTimer-= this.vx;
-		cSpikeTimer-= this.vx;
-		score += this.vx;
+		fSpikeTimer-= Math.abs(this.vx);
+		cSpikeTimer-= Math.abs(this.vx);
+		score += Math.abs(this.vx);
 		
 		if (direction == LEFT || direction == RIGHT)
 			player.x += this.vx;
+	},
+	change: function() {
+		if (direction == DOWN || direction == RIGHT)
+			this.vx = Math.abs(this.vx);
+		else 
+			this.vx = -Math.abs(this.vx);
 	}
 }
 var lastPlayer = {};
@@ -173,10 +179,13 @@ var healthPack = {
 					player.x + player.w + this.r, player.y + player.h + this.r)) {
 			lives++;
 			this.y = random(160, 440);
-			this.x += random(400,420)//random(1000, 3000);
-		} else if (this.x - camera.x < -10) {
+			this.x += random(400,420) * camera.vx / Math.abs(camera.vx) //random(1000, 3000);
+		} else if (this.x - camera.x < -10 && direction % 2 == 0) {
 			this.y = random(160, 440);
 			this.x += random(400,420)//random(1000, 3000);
+		} else if (this.x - camera.x > canvas.width + 10 && direction % 2 == 1) {
+			this.y = random(160, 440);
+			this.x -= random(400,420)//random(1000, 3000);
 		}
 	}
 }
@@ -240,12 +249,25 @@ function newFloorSpike(x, h) {
 			}
 		},
 		updateUD : function() {
-			if (player.y < this.y + this.h && player.y + player.h > this.y &&
-			player.x + player.w >= this.x && player.x + player.w - player.vx <= this.x) {
-				this.color = 'black';
-				player.midair = false;
-				player.x = this.x - player.w;
-				player.vx = 0;
+			if (player.y < this.y + this.h && player.y + player.h > this.y)	{		
+				if (player.x + player.w >= this.x && player.x + player.w - player.vx <= this.x) {
+					this.color = 'black';
+					player.midair = false;
+					player.x = this.x - player.w;
+					player.vx = 0;
+				}
+				else if (player.vx < 0 && player.x <= this.x + this.w && player.x - player.vx >= this.x + this.w) {
+					this.color = 'orange';
+					player.x = this.x + this.w;
+					player.vx = 0;
+				} 				
+				else if (player.x < this.x + this.w && player.x + player.w > this.x && player.y + player.h - player.vy < this.y) {
+					this.color = 'green';
+					if (!this.touched) {
+						lives--;
+						this.touched = true;
+					}
+				}				
 			}
 		}
 	}
@@ -275,12 +297,25 @@ function newCeilingSpike(x, h) {
 			}
 		},
 		updateUD : function() {
-			if (player.y < this.y + this.h && player.y + player.h > this.y &&
-			player.x + player.w >= this.x && player.x + player.w - player.vx <= this.x) {
-				this.color = 'black';
-				player.midair = false;
-				player.x = this.x - player.w;
-				player.vx = 0;
+			if (player.y < this.y + this.h && player.y + player.h > this.y)	{		
+				if (player.x + player.w >= this.x && player.x + player.w - player.vx <= this.x) {
+					this.color = 'black';
+					player.midair = false;
+					player.x = this.x - player.w;
+					player.vx = 0;
+				}
+				else if (player.vx < 0 && player.x <= this.x + this.w && player.x - player.vx >= this.x + this.w) {
+					this.color = 'orange';
+					player.x = this.x + this.w;
+					player.vx = 0;
+				} 				
+				else if (player.x < this.x + this.w && player.x + player.w > this.x && player.y - player.vy > this.y + this.h) {
+					this.color = 'green';
+					if (!this.touched) {
+						lives--;
+						this.touched = true;
+					}
+				}				
 			}
 		}
 	}
@@ -336,7 +371,6 @@ function draw() {
 function update() {
 //TODO: rotation
 //TODO: rotation transitions
-//TODO: other side collision
 //TODO: sprites
 //TODO: endgame
 	switch(direction){
@@ -358,6 +392,21 @@ function update() {
 		}
 		break;
 		case LEFT:
+		player.updateLR();
+		for (let s in floorSpikes) {
+			let spike = floorSpikes[s];
+			spike.updateLR();
+			if (spike.x - camera.x > canvas.width + 50)
+				floorSpikes.splice(s--, 1)
+			
+		}
+		for (let s in ceilingSpikes) {
+			let spike = ceilingSpikes[s];
+			spike.updateLR();
+			if (spike.x - camera.x > canvas.width + 50)
+				ceilingSpikes.splice(s--, 1)
+		}
+		break;
 		case RIGHT:
 		player.updateLR();
 		for (let s in floorSpikes) {
@@ -380,12 +429,12 @@ function update() {
 
 	if (fSpikeTimer <= 0) {
 		let h = random(30, 100);
-		floorSpikes.push(newFloorSpike(Math.floor(camera.x) + 600, h))
+		floorSpikes.push(newFloorSpike(Math.floor(camera.x) + 600 * camera.vx / Math.abs(camera.vx), h))
 		fSpikeTimer = random(200, 500);
 	}	
 	if (cSpikeTimer <= 0) {
 		let h = random(30, 100);
-		ceilingSpikes.push(newCeilingSpike(Math.floor(camera.x) + 600,h))
+		ceilingSpikes.push(newCeilingSpike(Math.floor(camera.x) + 600 * camera.vx / Math.abs(camera.vx),h))
 		cSpikeTimer = random(200, 500);
 	}
 	healthPack.update();
@@ -409,6 +458,7 @@ function tick() {
 }
 setInterval(tick, 1)
 
+/*
 setTimeout(() => {
 	direction = DOWN;
 	player.h = player.h ^ player.w;
@@ -417,6 +467,11 @@ setTimeout(() => {
 	player.vx = 0;
 	player.vy = 0;
 	player.jumps = 1;
+}, 3000)
+*/
+setTimeout(() => {
+	direction = DOWN;
+	camera.change();
 }, 3000)
 
 </script>
